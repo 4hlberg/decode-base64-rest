@@ -42,7 +42,7 @@ class DataAccess:
 
         else:
             pass
-        return img_base64
+        return img_base64.image()
 
 
     def __get_all_decodees(self, name):
@@ -68,9 +68,8 @@ class DataAccess:
 
 data_access_layer = DataAccess()
 
-@app.route("/decode", methods=["GET"])
-def get_decoding():
-    path = app.root_path + "/rogaland_1.json"
+@app.route("/<path:path>", methods=["GET"])
+def path():
     json_data = json.load(open(path))
     for entity in json_data:
         decodedfilename = data_access_layer.get_decode(entity)
