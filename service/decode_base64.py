@@ -23,60 +23,74 @@ headers = {}
 if os.environ.get('headers') is not None:
     headers = json.loads(os.environ.get('headers').replace("'","\""))
 
-def filenamegenerate(d_filename):
-    decodedfilename = d_filename + ".jpeg"
-    return decodedfilename
+def decode(v):
+    for key, value in v.items():
+        if isinstance(value,dict):
+            encode(value)
+        else:
+            v[key] = base64.b64decode(requests.get(value).content).decode("utf-8")
 
-def image_data(img_base64):
-    img_data =img_base64
-    return img_data
+    return v
+
+def transform(obj):
+    res = {}
+    # print(obj.items())
+    for k, v in obj.items():
+        if k == "image":
+            if dotdictify.dotdictify(v).image is not None:
+                logger.info("Decoding images from url to base64...")
+                res[k] = decode(v)
+
+            else:
+                pass
+        try:
+            _ = json.dumps(v)
+        except Exception:
+            pass
+        else:
+            res[k] = v
+    return res
 
 class DataAccess:
-    def __get_image_data(self, image):
-        logger.info("Fetching data from file: %s")
-        img_base64 = str()
-        for k, v in image.items():
-            if k == 'image':
-                img_base64 += v
-                image_data(img_base64)
 
-        else:
-            pass
-        return img_base64.image()
+    def __get_all_users(self, path):
+        logger.info("Fetching data from url: %s", path)
+        offset = 0
+        limit = 5
+        page_number = 1
+        url= path + "&limit=" + str(limit) + "&offset=" + str(offset)
 
+        req = requests.get(url, headers=headers)
+        if req.status_code != 200:
+            logger.error("Unexpected response status code: %d with response text %s" % (req.status_code, req.text))
+            raise AssertionError("Unexpected response status code: %d with response text %s" % (req.status_code, req.text))
+        clean = json.loads(req.text)
 
-    def __get_all_decodees(self, name):
-        logger.info("Fetching data from file: %s")
-        d_filename = str()
-        for k, v in name.items():
-            if k == 'name':
-                d_filename += v
-            elif k == 'employee-number':
-                d_filename += v
-        else:
-            pass
-        return filenamegenerate(d_filename)
+        for offset in range(0, offset, len(req.headers['Content-Range'])):
+            yield transform(clean)
+            print(count)
+            last_offset = page_number * limit
+            print('last offset =', last_offset)
+            page_number +=1
 
-
-    def get_decode(self, path):
-        print('getting all decodees')
-        return self.__get_all_decodees(path)
-
-    def get_img_data(self, path):
-        print("Getting image data")
-        return self.__get_image_data(path)
+    def get_users(self, path):
+        print("Getting all users")
+        return self.__get_all_users(path)
 
 data_access_layer = DataAccess()
 
-@app.route("/<path:path>", methods=["GET"])
-def path():
-    json_data = json.load(open(path))
+@app.route("/decode", methods=["GET"])
+def get_decoding():
+    path = os.environ.get("decode_base_url") + os.environ.get("decode_region")
+    json_data = data_access_layer.get_users(path)
     for entity in json_data:
-        decodedfilename = data_access_layer.get_decode(entity)
-        img_data = data_access_layer.get_img_data(entity)
-        with open(app.root_path + "/" + decodedfilename, 'wb') as fh:
-            fh.write(base64.b64decode(img_data))
-
+        decodedfilename = entity['rogaland-image-decode:name'].replace(" ", "_") + "_" +entity['rogaland-image-decode:employee-number'] + ".jpeg"
+                #img_data = data_access_layer.get_users(json_data.image)
+        if entity['rogaland-image-decode:image'] is not None:
+            with open(app.root_path + "/" + decodedfilename, 'wb') as fh:
+                fh.write(base64.b64decode(entity['rogaland-image-decode:image']))
+        else:
+            pass
     return Response(
         print("foo"),
         mimetype='application/json'
