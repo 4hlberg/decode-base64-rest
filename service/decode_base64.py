@@ -55,23 +55,27 @@ class DataAccess:
 
     def __get_all_users(self, path):
         logger.info("Fetching data from url: %s", path)
+        start = 1
+        #end = len({dicts})
+        end = 1000
         offset = 0
-        limit = 5
-        page_number = 1
-        url= path + "&limit=" + str(limit) + "&offset=" + str(offset)
+        while start < end:
+            limit = 1
+            url= path + "&limit=" + str(limit) + "&since=" + str(offset)
+            print(url)
+            req = requests.get(url, headers=headers)
+            if req.status_code != 200:
+                logger.error("Unexpected response status code: %d with response text %s" % (req.status_code, req.text))
+                raise AssertionError("Unexpected response status code: %d with response text %s" % (req.status_code, req.text))
+            clean = json.loads(req.text)
+            print(start)
+            for entity in clean:
+                yield entity
+                del entity
+            sleep(float(os.environ.get('sleep')))
+            offset = limit * start
+            start +=1
 
-        req = requests.get(url, headers=headers)
-        if req.status_code != 200:
-            logger.error("Unexpected response status code: %d with response text %s" % (req.status_code, req.text))
-            raise AssertionError("Unexpected response status code: %d with response text %s" % (req.status_code, req.text))
-        clean = json.loads(req.text)
-
-        for offset in range(0, offset, len(req.headers['Content-Range'])):
-            yield transform(clean)
-            print(count)
-            last_offset = page_number * limit
-            print('last offset =', last_offset)
-            page_number +=1
 
     def get_users(self, path):
         print("Getting all users")
@@ -79,18 +83,40 @@ class DataAccess:
 
 data_access_layer = DataAccess()
 
+def stream_json(clean):
+    first = True
+    yield '['
+    for i, row in enumerate(clean):
+        if not first:
+            yield ','
+        else:
+            first = False
+        yield json.dumps(row)
+    yield ']'
+
 @app.route("/decode", methods=["GET"])
 def get_decoding():
     path = os.environ.get("decode_base_url") + os.environ.get("decode_region")
     json_data = data_access_layer.get_users(path)
     for entity in json_data:
-        decodedfilename = entity['rogaland-image-decode:name'].replace(" ", "_") + "_" +entity['rogaland-image-decode:employee-number'] + ".jpeg"
+        if entity['rogaland-image-decode:name']:
+            if entity['rogaland-image-decode:employee-number']:
+
+                decodedfilename = entity['rogaland-image-decode:name'].replace(" ", "_") + "_" +entity['rogaland-image-decode:employee-number'] + ".jpeg"
+                print(decodedfilename)
                 #img_data = data_access_layer.get_users(json_data.image)
-        if entity['rogaland-image-decode:image'] is not None:
-            with open(app.root_path + "/" + decodedfilename, 'wb') as fh:
-                fh.write(base64.b64decode(entity['rogaland-image-decode:image']))
+
+                if entity['rogaland-image-decode:image'] is not None:
+                    with open(app.root_path + "/" + decodedfilename, 'wb') as fh:
+                        fh.write(base64.b64decode(entity['rogaland-image-decode:image']))
+                else:
+                    pass
+            else:
+                pass
+
         else:
-            pass
+             pass
+        del entity
     return Response(
         print("foo"),
         mimetype='application/json'
